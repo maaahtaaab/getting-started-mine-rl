@@ -36,12 +36,29 @@ class ConvNet(nn.Module):
         # TODO Create a torch neural network here to turn images (of shape `input_shape`) into
         #      a vector of shape `output_dim`. This output_dim matches number of available actions.
         #      See examples of doing CNN networks here https://pytorch.org/tutorials/beginner/nn_tutorial.html#switch-to-cnn
-        raise NotImplementedError("TODO implement a simple convolutional neural network here")
+        n_input_channels = input_shape[0]
+        self.cnn = nn.Sequential(
+            nn.Conv2d(n_input_channels, 32, kernel_size=8, stride=4, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(32, 64, kernel_size=4, stride=2, padding=0),
+            nn.ReLU(),
+            nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=0),
+            nn.ReLU(),
+            nn.Flatten(),
+        )
+        with th.no_grad():
+          n_flatten = self.cnn(th.zeros(1, *input_shape)).shape[1]
+
+        self.linear = nn.Sequential(
+          nn.Linear(n_flatten, 512),
+          nn.ReLU(),
+          nn.Linear(512, output_dim)
+      )
 
     def forward(self, observations: th.Tensor) -> th.Tensor:
         # TODO with the layers you created in __init__, transform the `observations` (a tensor of shape (B, C, H, W)) to
         #      a tensor of shape (B, D), where D is the `output_dim`
-        raise NotImplementedError("TODO implement forward function of the neural network")
+        return self.linear(self.cnn(observations))
 
 
 def agent_action_to_environment(noop_action, agent_action):
@@ -54,10 +71,9 @@ def agent_action_to_environment(noop_action, agent_action):
     noop_action is a MineRL action that does nothing. You may want to
     use this as a template for the action you return.
     """
-    raise NotImplementedError("TODO implement agent_action_to_environment (see docstring)")
 
 
-def environment_action_batch_to_agent_actions(dataset_actions):
+def environment_action_batch_to_agent_actions(dataset_actions, camera_margin=5):
     """
     Turn a batch of actions from environment (from BufferedBatchIterator) to a numpy
     array of agent actions.
@@ -93,17 +109,17 @@ def environment_action_batch_to_agent_actions(dataset_actions):
         # TODO this will make all actions invalid. Replace with something
         # more clever
         actions[i] = -1
-        raise NotImplementedError("TODO map dataset action at index i to an agent action, or if no mapping, -1")
     return actions
 
 
 def train():
     # Path to where MineRL dataset resides (should contain "MineRLTreechop-v0" directory)
-    DATA_DIR = "."
+    DATA_DIR = "/home/mahtab/minerl" 
     # How many times we train over dataset and how large batches we use.
     # Larger batch size takes more memory but generally provides stabler learning.
     EPOCHS = 1
     BATCH_SIZE = 32
+    LEARNING_RATE = 0.0001 
 
     # TODO create data iterators for going over MineRL data using BufferedBatchIterator
     #      https://minerl.readthedocs.io/en/latest/tutorials/data_sampling.html#sampling-the-dataset-with-buffered-batch-iter
@@ -112,16 +128,17 @@ def train():
     raise NotImplementedError("TODO create dataset samplers")
     iterator = None
 
-    number_of_actions = None
+    number_of_actions = 5
     # TODO we need to tell the network how many possible actions there are,
     #      so assign the value in above variable
     raise NotImplementedError("TODO add number of actions to `number_of_actions`")
     network = ConvNet((3, 64, 64), number_of_actions).cuda()
     # TODO create optimizer and loss functions for training
     #      see examples here https://pytorch.org/tutorials/beginner/basics/optimization_tutorial.html
-    raise NotImplementedError("TODO Create an optimizer and a loss function.")
-    optimizer = None
-    loss_function = None
+    optimizer = th.optim.Adam(network.parameters(), lr=LEARNING_RATE)
+    loss_function = nn.CrossEntropyLoss()
+    #optimizer = None
+    #loss_function = None
 
     iter_count = 0
     losses = []
@@ -149,6 +166,11 @@ def train():
         # See https://pytorch.org/tutorials/beginner/basics/optimization_tutorial.html 
         # for a tutorial
         # NOTE: Variables `obs` and `actions` are numpy arrays. You need to convert them into torch tensors.
+        logits = network(th.from_numpy(obs).float().cuda())
+        loss = loss_function(logits, th.from_numpy(actions).long().cuda())
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
 
         # Keep track of how training is going by printing out the loss
         iter_count += 1
